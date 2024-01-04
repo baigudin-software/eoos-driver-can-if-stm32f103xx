@@ -1,7 +1,7 @@
 /**
  * @file      drv.CanController.hpp
  * @author    Sergey Baigudin, sergey@baigudin.software
- * @copyright 2023, Sergey Baigudin, Baigudin Software
+ * @copyright 2023-2024, Sergey Baigudin, Baigudin Software
  */  
 #ifndef DRV_CANCONTROLLER_HPP_
 #define DRV_CANCONTROLLER_HPP_
