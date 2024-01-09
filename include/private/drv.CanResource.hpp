@@ -116,7 +116,10 @@ private:
     /**
      * @brief Enables or disables USART clock peripheral.
      *
+     * bxCAN is APB1 peripheral, enable PCLK1 of 36 MHz for SYSCLK of 72 MHz.
+     *
      * @param enable True to enable and false to disable.
+     * @todo Check SYSCLK is 72 MHz and enable the clock if only.
      */
     void enableClock(bool_t enable);    
     
@@ -204,7 +207,7 @@ bool_t CanResource<A>::initialize()
         enableClock(true);
         // Exit sleep mode
         reg_->mcr.bit.sleep = 0;
-        // Request initialisation
+        // Enter to the Initialization mode
         reg_->mcr.bit.inrq = 1;
         // Wait the acknowledge
         uint32_t timeout( 0x0000FFFF );
@@ -225,24 +228,23 @@ bool_t CanResource<A>::initialize()
         }
         // Set master control register
         cpu::reg::Can::Mcr mcr(reg_->mcr.value);        
-        mcr.bit.ttcm = ( config_.reg.mcr.ttcm == 1 ) ? 1 : 0;
-        mcr.bit.abom = ( config_.reg.mcr.abom == 1 ) ? 1 : 0;
-        mcr.bit.awum = ( config_.reg.mcr.awum == 1 ) ? 1 : 0;
-        mcr.bit.nart = ( config_.reg.mcr.nart == 1 ) ? 1 : 0;
-        mcr.bit.rflm = ( config_.reg.mcr.rflm == 1 ) ? 1 : 0;
-        mcr.bit.txfp = ( config_.reg.mcr.txfp == 1 ) ? 1 : 0;
+        mcr.bit.ttcm = config_.reg.mcr.ttcm;
+        mcr.bit.abom = config_.reg.mcr.abom;
+        mcr.bit.awum = config_.reg.mcr.awum;
+        mcr.bit.nart = config_.reg.mcr.nart;
+        mcr.bit.rflm = config_.reg.mcr.rflm;
+        mcr.bit.txfp = config_.reg.mcr.txfp;
         reg_->mcr.value = mcr.value;
-        
         // Set the bit timing register
         cpu::reg::Can::Btr btr(reg_->btr.value);
-        btr.bit.brp  = ( config_.reg.btr.brp  == 1 ) ? 1 : 0;
-        btr.bit.ts1  = ( config_.reg.btr.ts1  == 1 ) ? 1 : 0;
-        btr.bit.ts2  = ( config_.reg.btr.ts2  == 1 ) ? 1 : 0;
-        btr.bit.sjw  = ( config_.reg.btr.sjw  == 1 ) ? 1 : 0;
-        btr.bit.lbkm = ( config_.reg.btr.lbkm == 1 ) ? 1 : 0;
-        btr.bit.silm = ( config_.reg.btr.silm == 1 ) ? 1 : 0;
+        btr.bit.brp  = config_.reg.btr.brp;
+        btr.bit.ts1  = config_.reg.btr.ts1;
+        btr.bit.ts2  = config_.reg.btr.ts2;
+        btr.bit.sjw  = config_.reg.btr.sjw;
+        btr.bit.lbkm = config_.reg.btr.lbkm;
+        btr.bit.silm = config_.reg.btr.silm;
         reg_->btr.value = btr.value;
-        // Request leave initialisation
+        // Enter to the Normal mode
         reg_->mcr.bit.inrq = 0;
         // Wait the acknowledge
         timeout = 0x0000FFFF;
