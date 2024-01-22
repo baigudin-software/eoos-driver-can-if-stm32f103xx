@@ -41,8 +41,8 @@ public:
         /**
          * @brief Constructor.
          *
-         * @param reg Target CPU register model.  
-         * @param svc Supervisor call to the system.
+         * @param areg Target CPU register model.  
+         * @param asvc Supervisor call to the system.
          */
         Data(cpu::Registers& areg, api::Supervisor& asvc);
         
@@ -73,13 +73,18 @@ public:
     
     /** 
      * @brief Destructor.
-     */                               
+     */
     virtual ~CanResource();
     
     /**
      * @copydoc eoos::api::Object::isConstructed()
      */
-    virtual bool_t isConstructed() const;  
+    virtual bool_t isConstructed() const;
+    
+    /**
+     * @copydoc eoos::drv::Can::transmit()
+     */
+    virtual TxHandler* transmit(TxMessage const& message);
         
 protected:
 
@@ -112,16 +117,97 @@ private:
      * @brief Initializes the hardware.
      */
     void deinitialize();
+
+    /**
+     * @brief Checks system clocks.
+     *
+     * @return True if clocks is correct.
+     */
+    bool_t checkClocks();
     
     /**
-     * @brief Enables or disables USART clock peripheral.
+     * @brief Enables or disables clock peripheral.
      *
      * bxCAN is APB1 peripheral, enable PCLK1 of 36 MHz for SYSCLK of 72 MHz.
      *
      * @param enable True to enable and false to disable.
-     * @todo Check SYSCLK is 72 MHz and enable the clock if only.
+     * @return True if clock is set.
      */
-    void enableClock(bool_t enable);    
+    bool_t enableClock(bool_t enable);    
+
+    /**
+     * @brief Set CAN bus bit rate.
+     *
+     * @ref http://www.bittiming.can-wiki.info/ 
+     * @return True if bit rate is set.
+     */
+    bool_t setBitRate();
+
+    /**
+     * @class TxMailbox
+     * @brief TX Mailbox handler.
+     */
+    class TxMailbox : public lib::NonCopyable<A>, public Can::TxHandler
+    {
+        typedef lib::NonCopyable<A> Parent;
+    
+    public:
+    
+        /**
+         * @brief Constructor.
+         *
+         * @param index Mailbox index.
+         * @param reg CAN controller register map.     
+         */
+        TxMailbox(int32_t index, cpu::reg::Can* reg);
+        
+        /** 
+         * @brief Destructor.
+         */
+        virtual ~TxMailbox();
+        
+        /**
+         * @copydoc eoos::api::Object::isConstructed()
+         */
+        virtual bool_t isConstructed() const;
+        
+        /**
+         * @copydoc eoos::drv::Can::TxHandler::isTransmited()        
+         */
+        virtual bool_t isTransmited();
+
+        /**
+         * @brief Initiates the transmission of a message.
+         *
+         * @param message A message to tramsmit.
+         */
+        void transmit(Can::TxMessage const& message);
+
+        /**
+         * @brief Tests if the mailbox is ready to transmit.
+         *
+         * @return True if the mailbox is ready to transmit.
+         */
+        bool_t isEmpty();
+    
+    private:
+
+        /**
+         * @brief Mailbox index.
+         */
+        int32_t index_;
+
+        /**
+         * @brief CAN registers.
+         */
+        cpu::reg::Can* reg_;
+
+    };
+    
+    /**
+     * @brief Number of TX mailboxs.
+     */    
+    static const int32_t NUMBER_OF_TX_MAILBOXS = 3;
     
     /**
      * @brief Global data for all these objects;
@@ -142,16 +228,27 @@ private:
      * @brief This resource mutex.
      */
     lib::Mutex<A> mutex_;
-    
+
+    /**
+     * @brief TX mailboxs.
+     */    
+    TxMailbox  txMailbox0_;
+    TxMailbox  txMailbox1_;
+    TxMailbox  txMailbox2_;
+    TxMailbox* txMailbox_[NUMBER_OF_TX_MAILBOXS];
 };
 
 template <class A>
 CanResource<A>::CanResource(Data& data, Config const& config)
     : lib::NonCopyable<A>()
+    , Can()
     , data_( data )
     , config_( config )
     , reg_(  data_.reg.can[config_.number]  )    
-    , mutex_() {
+    , mutex_()
+    , txMailbox0_(0, reg_)
+    , txMailbox1_(1, reg_)
+    , txMailbox2_(2, reg_) {
     bool_t const isConstructed( construct() );
     setConstructed( isConstructed );
 }    
@@ -169,8 +266,34 @@ bool_t CanResource<A>::isConstructed() const
 }
 
 template <class A>
+Can::TxHandler* CanResource<A>::transmit(TxMessage const& message)
+{
+    TxMailbox* handler( NULLPTR );
+    if( isConstructed() )
+    {
+        lib::Guard<A> const guard(mutex_);
+        for(int32_t i=0; i<NUMBER_OF_TX_MAILBOXS; i++)
+        {
+            if( txMailbox_[i]->isEmpty() )
+            {
+                handler = txMailbox_[i];
+                break;
+            }
+        }
+        if( handler != NULLPTR )
+        {
+            handler->transmit(message);
+        }
+    }
+    return handler;
+}
+
+template <class A>
 bool_t CanResource<A>::construct()
 {
+    txMailbox_[0] = &txMailbox0_;
+    txMailbox_[1] = &txMailbox1_;
+    txMailbox_[2] = &txMailbox2_;    
     bool_t res( false );
     do 
     {
@@ -194,7 +317,7 @@ bool_t CanResource<A>::construct()
 template<class A>
 bool_t CanResource<A>::isNumberValid()
 {
-    return (NUMBER_CAN1 == config_.number) || (NUMBER_CAN1 == config_.number);
+    return NUMBER_CAN1 == config_.number;
 }
 
 template <class A>
@@ -204,7 +327,14 @@ bool_t CanResource<A>::initialize()
     do 
     {
         lib::Guard<A> const guard(data_.mutex);
-        enableClock(true);
+        if( !checkClocks() )
+        {
+            break;
+        }
+        if( !enableClock(true) )
+        {
+            break;
+        }
         // Exit sleep mode
         reg_->mcr.bit.sleep = 0;
         // Enter to the Initialization mode
@@ -237,13 +367,14 @@ bool_t CanResource<A>::initialize()
         reg_->mcr.value = mcr.value;
         // Set the bit timing register
         cpu::reg::Can::Btr btr(reg_->btr.value);
-        btr.bit.brp  = config_.reg.btr.brp;
-        btr.bit.ts1  = config_.reg.btr.ts1;
-        btr.bit.ts2  = config_.reg.btr.ts2;
-        btr.bit.sjw  = config_.reg.btr.sjw;
         btr.bit.lbkm = config_.reg.btr.lbkm;
         btr.bit.silm = config_.reg.btr.silm;
         reg_->btr.value = btr.value;
+        // Set bus bit rate
+        if( !setBitRate() )
+        {
+            break;
+        }
         // Enter to the Normal mode
         reg_->mcr.bit.inrq = 0;
         // Wait the acknowledge
@@ -272,12 +403,24 @@ template <class A>
 void CanResource<A>::deinitialize()
 {
     lib::Guard<A> const guard(data_.mutex);
-    enableClock(false);
+    static_cast<void>(enableClock(false));
 }
 
 template <class A>
-void CanResource<A>::enableClock(bool_t enable)
+bool_t CanResource<A>::checkClocks()
 {
+    bool_t res( false );
+    if( data_.svc.getProcessor().getPllController().getCpuClock() == 72000000 )
+    {
+        res = true;
+    }
+    return res;
+}
+
+template <class A>
+bool_t CanResource<A>::enableClock(bool_t enable)
+{
+    bool_t res(true);
     uint32_t en = (enable) ? 1 : 0;
     switch( config_.number )
     {
@@ -286,16 +429,50 @@ void CanResource<A>::enableClock(bool_t enable)
             data_.reg.rcc->apb1enr.bit.can1en = en;
             break;
         }
-        case NUMBER_CAN2:
-        {
-            data_.reg.rcc->apb1enr.bit.can2en = en;
-            break;
-        }
         default:
         {
+            res = false;
             break;
         }
     }
+    return res;
+}
+
+template <class A>
+bool_t CanResource<A>::setBitRate()
+{
+    uint32_t const value[2][9] = {
+        {   // For CANopen
+            0x001e0001, // 1000 
+            0x001b0002, // 800  
+            0x001e0003, // 500  
+            0x001c0008, // 250  
+            0x001c0011, // 125  
+            0x001e0013, // 100  
+            0x001c002c, // 50   
+            0x001e0063, // 20   
+            0x001c00e0  // 10   
+        }, 
+        {   // For ARINC 825
+            0x003c0001, // 1000 
+            0x00390002, // 800  
+            0x003c0003, // 500  
+            0x003a0008, // 250  
+            0x003a0011, // 125  
+            0x004d0011, // 100  
+            0x004d0023, // 50   
+            0x004d0059, // 20   
+            0x003a00e0  // 10   
+        }
+    };
+    cpu::reg::Can::Btr cfg(value[config_.samplePoint][config_.bitRate]);
+    cpu::reg::Can::Btr reg(reg_->btr.value);
+    reg.bit.brp  = cfg.bit.brp;
+    reg.bit.ts1  = cfg.bit.ts1;
+    reg.bit.ts2  = cfg.bit.ts2;
+    reg.bit.sjw  = cfg.bit.sjw;
+    reg_->btr.value = reg.value;
+    return true;
 }
 
 template <class A>
@@ -304,6 +481,84 @@ CanResource<A>::Data::Data(cpu::Registers& areg, api::Supervisor& asvc)
     , svc( asvc )
     , mutex() {
 }
+
+template <class A>
+CanResource<A>::TxMailbox::TxMailbox(int32_t index, cpu::reg::Can* reg)
+    : lib::NonCopyable<A>()
+    , Can::TxHandler()
+    , index_( index )
+    , reg_( reg ) {
+}    
+
+template <class A>
+CanResource<A>::TxMailbox::~TxMailbox()
+{
+}
+
+template <class A>
+bool_t CanResource<A>::TxMailbox::isConstructed() const
+{
+    return Parent::isConstructed();
+}
+
+template <class A>
+bool_t CanResource<A>::TxMailbox::isTransmited()
+{
+    return false;
+}
+
+template <class A>
+void CanResource<A>::TxMailbox::transmit(Can::TxMessage const& message)
+{
+    if( isConstructed() && isEmpty() )
+    {
+        reg_->tx[index_].tixr.bit.txrq = 0;
+        reg_->tx[index_].tixr.bit.rtr = (message.rtr == true) ? 1 : 0;
+        if( message.ide == false )
+        {
+            reg_->tx[index_].tixr.bit.ide = 0;
+            reg_->tx[index_].tixr.bit.exid = 0;
+            reg_->tx[index_].tixr.bit.stid = message.id & 0x000007FF;
+        }
+        else
+        {
+            reg_->tx[index_].tixr.bit.ide = 1;
+            reg_->tx[index_].tixr.bit.exid = message.id & 0x0003FFFF;
+            reg_->tx[index_].tixr.bit.stid = (message.id >> 18) & 0x000007FF;
+        }
+        reg_->tx[index_].tdtxr.bit.dlc = message.dlc;
+        reg_->tx[index_].tdlxr.value = message.data.v32[0];
+        reg_->tx[index_].tdhxr.value = message.data.v32[1];
+        reg_->tx[index_].tixr.bit.txrq = 1;            
+    }
+}
+
+template <class A>
+bool_t CanResource<A>::TxMailbox::isEmpty()
+{
+    bool_t res( false );
+    if( isConstructed() )
+    {
+        if( index_ == 0 )
+        {
+            res = reg_->tsr.bit.tme0 == 1;
+        }
+        else if( index_ == 1 )
+        {
+            res = reg_->tsr.bit.tme1 == 1;
+        }
+        else if( index_ == 2 )
+        {
+            res = reg_->tsr.bit.tme2 == 1;
+        }
+        else
+        {
+            res = false;
+        }
+    }
+    return res;
+}    
+
 
 } // namespace drv
 } // namespace eoos

@@ -27,10 +27,36 @@ public:
      */
     enum Number
     {
-        NUMBER_CAN1 = 0,
-        NUMBER_CAN2 = 1        
+        NUMBER_CAN1 = 0
     };
     
+    /**
+     * @enum BitRate
+     * @brief CAN bus speed in Kbit/s.
+     */
+    enum BitRate
+    {
+        BITRATE_1000 = 0,
+        BITRATE_800,
+        BITRATE_500,
+        BITRATE_250,
+        BITRATE_125,
+        BITRATE_100,
+        BITRATE_50,
+        BITRATE_20,
+        BITRATE_10
+    };
+
+    /**
+     * @enum SamplePoint
+     * @brief CANNN standard of sample point in percentage.
+     */    
+    enum SamplePoint
+    {
+        SAMPLEPOINT_CANOPEN = 0, // 87.5% is the preferred value for CANopen and DeviceNet
+        SAMPLEPOINT_ARINC825     // 75.0% is the default value for ARINC 825
+    };
+
     /**
      * @struct Reg
      * @brief CAN controller registers.
@@ -52,13 +78,7 @@ public:
         // CAN bit timing register
         struct Btr
         {
-            uint32_t brp  : 10;     ///< Baud rate prescaler (reset value is 0)
-            uint32_t      : 6;
-            uint32_t ts1  : 4;      ///< Time segment 1 (reset value is 3)
-            uint32_t ts2  : 3;      ///< Time segment 2 (reset value is 2)
-            uint32_t      : 1;
-            uint32_t sjw  : 2;      ///< Resynchronization jump width (reset value is 0)
-            uint32_t      : 4;
+            uint32_t      : 30;
             uint32_t lbkm : 1;      ///< Loop back mode for debug (reset value is 0)
             uint32_t silm : 1;      ///< Silent mode for debug (reset value is 0)
         } btr;
@@ -70,14 +90,68 @@ public:
      */    
     struct Config
     {
-        Number  number;
-        Reg     reg;
+        Number      number;
+        BitRate     bitRate;
+        SamplePoint samplePoint;
+        Reg         reg;
+    };
+    
+    /**
+     * @struct TxMessage
+     * @brief CAN TX message structure definition.
+     */
+    struct TxMessage
+    {
+        uint32_t    id;         ///< An identifier of 11 bits or 29 bits
+        bool_t      ide;        ///< Identifier extension bit that is false for base frame and true for extended frame
+        bool_t      rtr;        ///< Remote transmission request that is true for remote request frames
+        uint32_t    dlc;        ///< Data length code that is number of bytes of data (0–8 bytes)
+        union
+        {
+            uint64_t v64[1];
+            uint32_t v32[2];
+            uint16_t v16[4];            
+            uint8_t  v8[8];    
+        } data;                 ///< Data to be transmitted
+    };
+    
+    /**
+     * @class TxHandler
+     * @brief CAN TX handler.
+     */    
+    class TxHandler
+    {
+        
+    public:
+        
+        /**
+         * @brief Tests if the message is transmited.
+         *
+         * @return Transmit resource.
+         */
+        virtual bool_t isTransmited() = 0;
+        
+    protected:
+    
+        /** 
+         * @brief Destructor.
+         */                               
+        virtual ~TxHandler() = 0;        
+
     };
     
     /** 
      * @brief Destructor.
      */                               
     virtual ~Can() = 0;
+
+    /**
+     * @brief Initiates the transmission of a message.
+     *
+     * @param message A message to tramsmit.
+     * @return Transmit handler or NULLPTR if an error occurred.
+     */
+    virtual TxHandler* transmit(TxMessage const& message) = 0;
 
     /**
      * @brief Create the driver resource.
