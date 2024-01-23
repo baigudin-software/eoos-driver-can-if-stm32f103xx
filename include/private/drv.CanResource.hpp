@@ -9,7 +9,10 @@
 #include "api.Supervisor.hpp"
 #include "lib.NonCopyable.hpp"
 #include "drv.Can.hpp"
+#include "drv.CanResourceMailbox.hpp"
+#include "drv.CanResourceRoutineTx.hpp"
 #include "cpu.Registers.hpp"
+#include "cpu.Interrupt.hpp"
 #include "lib.NoAllocator.hpp"
 #include "lib.Mutex.hpp"
 #include "lib.Guard.hpp"
@@ -142,66 +145,17 @@ private:
      * @return True if bit rate is set.
      */
     bool_t setBitRate();
-
+    
     /**
-     * @class TxMailbox
-     * @brief TX Mailbox handler.
-     */
-    class TxMailbox : public lib::NonCopyable<A>, public Can::TxHandler
+     * @enum Exception
+     * @brief CAN Exception numbers.
+     */    
+    enum Exception
     {
-        typedef lib::NonCopyable<A> Parent;
-    
-    public:
-    
-        /**
-         * @brief Constructor.
-         *
-         * @param index Mailbox index.
-         * @param reg CAN controller register map.     
-         */
-        TxMailbox(int32_t index, cpu::reg::Can* reg);
-        
-        /** 
-         * @brief Destructor.
-         */
-        virtual ~TxMailbox();
-        
-        /**
-         * @copydoc eoos::api::Object::isConstructed()
-         */
-        virtual bool_t isConstructed() const;
-        
-        /**
-         * @copydoc eoos::drv::Can::TxHandler::isTransmited()        
-         */
-        virtual bool_t isTransmited();
-
-        /**
-         * @brief Initiates the transmission of a message.
-         *
-         * @param message A message to tramsmit.
-         */
-        void transmit(Can::TxMessage const& message);
-
-        /**
-         * @brief Tests if the mailbox is ready to transmit.
-         *
-         * @return True if the mailbox is ready to transmit.
-         */
-        bool_t isEmpty();
-    
-    private:
-
-        /**
-         * @brief Mailbox index.
-         */
-        int32_t index_;
-
-        /**
-         * @brief CAN registers.
-         */
-        cpu::reg::Can* reg_;
-
+        EXCEPTION_CAN1_TX  = cpu::Interrupt<A>::EXCEPTION_USB_HP_CAN1_TX,  ///< Transmit interrupt
+        EXCEPTION_CAN1_RX0 = cpu::Interrupt<A>::EXCEPTION_USB_LP_CAN1_RX0, ///< FIFO 0 interrupt
+        EXCEPTION_CAN1_RX1 = cpu::Interrupt<A>::EXCEPTION_CAN1_RX1,        ///< FIFO 1 interrupt
+        EXCEPTION_CAN1_SCE = cpu::Interrupt<A>::EXCEPTION_CAN1_SCE         ///< Status change error interrupt
     };
     
     /**
@@ -228,14 +182,24 @@ private:
      * @brief This resource mutex.
      */
     lib::Mutex<A> mutex_;
+    
+    /**
+     * @brief TX ISR.
+     */    
+    CanResourceRoutineTx isrTx_;
+    
+    /**
+     * @brief Target CPU interrupt resource.
+     */    
+    api::CpuInterrupt* intTx_;    
 
     /**
      * @brief TX mailboxs.
      */    
-    TxMailbox  txMailbox0_;
-    TxMailbox  txMailbox1_;
-    TxMailbox  txMailbox2_;
-    TxMailbox* txMailbox_[NUMBER_OF_TX_MAILBOXS];
+    CanResourceMailbox  txMailbox0_;
+    CanResourceMailbox  txMailbox1_;
+    CanResourceMailbox  txMailbox2_;
+    CanResourceMailbox* txMailbox_[NUMBER_OF_TX_MAILBOXS];
 };
 
 template <class A>
@@ -246,6 +210,8 @@ CanResource<A>::CanResource(Data& data, Config const& config)
     , config_( config )
     , reg_(  data_.reg.can[config_.number]  )    
     , mutex_()
+    , isrTx_()
+    , intTx_( NULLPTR )
     , txMailbox0_(0, reg_)
     , txMailbox1_(1, reg_)
     , txMailbox2_(2, reg_) {
@@ -268,7 +234,7 @@ bool_t CanResource<A>::isConstructed() const
 template <class A>
 Can::TxHandler* CanResource<A>::transmit(TxMessage const& message)
 {
-    TxMailbox* handler( NULLPTR );
+    CanResourceMailbox* handler( NULLPTR );
     if( isConstructed() )
     {
         lib::Guard<A> const guard(mutex_);
@@ -308,7 +274,7 @@ bool_t CanResource<A>::construct()
         if( !initialize() )
         {
             break;
-        }
+        }        
         res = true;
     } while(false);
     return res;    
@@ -394,6 +360,16 @@ bool_t CanResource<A>::initialize()
         {
             break;
         }
+        // Set ISR for Transmit mailbox empty interrupt enable generated 
+        // when RQCPx (Request completed mailbox) bit is set.
+        intTx_ = data_.svc.getProcessor().getInterruptController().createResource(isrTx_, EXCEPTION_CAN1_TX);
+        if( !Parent::isConstructed(intTx_) )
+        {
+            break;
+        }
+        intTx_->enable();
+        reg_->ier.bit.tmeie = 1;
+        // Complite successfully
         res = true;
     } while(false);
     return res;
@@ -481,84 +457,6 @@ CanResource<A>::Data::Data(cpu::Registers& areg, api::Supervisor& asvc)
     , svc( asvc )
     , mutex() {
 }
-
-template <class A>
-CanResource<A>::TxMailbox::TxMailbox(int32_t index, cpu::reg::Can* reg)
-    : lib::NonCopyable<A>()
-    , Can::TxHandler()
-    , index_( index )
-    , reg_( reg ) {
-}    
-
-template <class A>
-CanResource<A>::TxMailbox::~TxMailbox()
-{
-}
-
-template <class A>
-bool_t CanResource<A>::TxMailbox::isConstructed() const
-{
-    return Parent::isConstructed();
-}
-
-template <class A>
-bool_t CanResource<A>::TxMailbox::isTransmited()
-{
-    return false;
-}
-
-template <class A>
-void CanResource<A>::TxMailbox::transmit(Can::TxMessage const& message)
-{
-    if( isConstructed() && isEmpty() )
-    {
-        reg_->tx[index_].tixr.bit.txrq = 0;
-        reg_->tx[index_].tixr.bit.rtr = (message.rtr == true) ? 1 : 0;
-        if( message.ide == false )
-        {
-            reg_->tx[index_].tixr.bit.ide = 0;
-            reg_->tx[index_].tixr.bit.exid = 0;
-            reg_->tx[index_].tixr.bit.stid = message.id & 0x000007FF;
-        }
-        else
-        {
-            reg_->tx[index_].tixr.bit.ide = 1;
-            reg_->tx[index_].tixr.bit.exid = message.id & 0x0003FFFF;
-            reg_->tx[index_].tixr.bit.stid = (message.id >> 18) & 0x000007FF;
-        }
-        reg_->tx[index_].tdtxr.bit.dlc = message.dlc;
-        reg_->tx[index_].tdlxr.value = message.data.v32[0];
-        reg_->tx[index_].tdhxr.value = message.data.v32[1];
-        reg_->tx[index_].tixr.bit.txrq = 1;            
-    }
-}
-
-template <class A>
-bool_t CanResource<A>::TxMailbox::isEmpty()
-{
-    bool_t res( false );
-    if( isConstructed() )
-    {
-        if( index_ == 0 )
-        {
-            res = reg_->tsr.bit.tme0 == 1;
-        }
-        else if( index_ == 1 )
-        {
-            res = reg_->tsr.bit.tme1 == 1;
-        }
-        else if( index_ == 2 )
-        {
-            res = reg_->tsr.bit.tme2 == 1;
-        }
-        else
-        {
-            res = false;
-        }
-    }
-    return res;
-}    
-
 
 } // namespace drv
 } // namespace eoos
