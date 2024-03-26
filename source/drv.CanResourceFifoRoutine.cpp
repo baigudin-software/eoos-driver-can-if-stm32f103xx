@@ -1,36 +1,37 @@
 /**
- * @file      drv.CanResourceRoutineTx.cpp
+ * @file      drv.CanResourceFifoRoutine.cpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#include "drv.CanResourceRoutineTx.hpp"
+#include "drv.CanResourceFifoRoutine.hpp"
 
 namespace eoos
 {
 namespace drv
 {
 
-CanResourceRoutineTx::CanResourceRoutineTx()
+CanResourceFifoRoutine::CanResourceFifoRoutine(Index index)
     : lib::NonCopyable<lib::NoAllocator>()
-    , api::Runnable() {
+    , api::Runnable()
+    , index_( index ){
     bool_t const isConstructed( construct() );
-    setConstructed( isConstructed );    
-}
+    setConstructed( isConstructed );
+}    
 
-CanResourceRoutineTx::~CanResourceRoutineTx()
+CanResourceFifoRoutine::~CanResourceFifoRoutine()
 {
 }
 
-bool_t CanResourceRoutineTx::isConstructed() const
+bool_t CanResourceFifoRoutine::isConstructed() const
 {
     return Parent::isConstructed();
 }
 
-void CanResourceRoutineTx::start()
-{
+void CanResourceFifoRoutine::start()
+{    
 }
 
-bool_t CanResourceRoutineTx::construct()
+bool_t CanResourceFifoRoutine::construct()
 {
     bool_t res( false );
     do 
@@ -41,7 +42,7 @@ bool_t CanResourceRoutineTx::construct()
         }
         res = true;
     } while(false);
-    return res;
+    return res;    
 }
 
 } // namespace drv

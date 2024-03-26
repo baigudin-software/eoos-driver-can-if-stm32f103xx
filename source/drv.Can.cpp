@@ -49,7 +49,6 @@ Can* Can::create(Config const& config)
 }
 
 Can::~Can(){}
-Can::TxHandler::~TxHandler(){}
 
 } // namespace drv
 } // namespace eoos

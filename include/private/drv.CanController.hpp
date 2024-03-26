@@ -10,7 +10,7 @@
 #include "drv.CanDefinitions.hpp"
 #include "lib.NonCopyable.hpp"
 #include "lib.NoAllocator.hpp"
-#include "lib.Mutex.hpp"
+#include "sys.Mutex.hpp"
 #include "lib.ResourceMemory.hpp"
 #include "cpu.Registers.hpp"
 
@@ -124,7 +124,7 @@ private:
         /**
          * @brief Mutex memory resource.
          */    
-        lib::Mutex<lib::NoAllocator> mutex_;
+        sys::Mutex mutex_;
     
     public:
     

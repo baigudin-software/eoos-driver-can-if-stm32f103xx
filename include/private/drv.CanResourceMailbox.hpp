@@ -20,11 +20,16 @@ namespace drv
  * @class CanResourceMailbox
  * @brief TX Mailbox handler.
  */
-class CanResourceMailbox : public lib::NonCopyable<lib::NoAllocator>, public Can::TxHandler
+class CanResourceMailbox : public lib::NonCopyable<lib::NoAllocator>
 {
     typedef lib::NonCopyable<lib::NoAllocator> Parent;
 
 public:
+
+    /**
+     * @brief Number of TX mailboxs.
+     */    
+    static const int32_t NUMBER_OF_TX_MAILBOXS = 3;
 
     /**
      * @brief Constructor.
@@ -45,16 +50,12 @@ public:
     virtual bool_t isConstructed() const;
     
     /**
-     * @copydoc eoos::drv::Can::TxHandler::isTransmited()        
-     */
-    virtual bool_t isTransmited();
-
-    /**
      * @brief Initiates the transmission of a message.
      *
      * @param message A message to tramsmit.
+     * @return True if a transmition is initialied.     
      */
-    void transmit(Can::TxMessage const& message);
+    bool_t transmit(Can::TxMessage const& message);
 
     /**
      * @brief Tests if the mailbox is ready to transmit.
@@ -62,8 +63,55 @@ public:
      * @return True if the mailbox is ready to transmit.
      */
     bool_t isEmpty();
+    
+    /**
+     * @brief Routines interrupt.
+     *
+     * @return True is interrupt is routined.
+     */    
+    bool_t routine();
 
 private:
+    
+    /**
+     * @brief Fixs the mailbox transmition status in internal state.
+     * 
+     * @return True if status is fixed.
+     */
+    bool_t fixRequestStatus();
+
+    /**
+     * @brief Tests if the mailbox transmition is completed in fixed request status.
+     *
+     * @return True if transmition is completed.
+     */
+    bool_t isFixedRequestCompleted();
+
+    /**
+     * @brief Clears the mailbox transmition status.
+     */    
+    void clearRequestStatus();
+
+    /**
+     * @brief Transmit request status.
+     */
+    union RequestStatus
+    {
+        RequestStatus(){}
+        RequestStatus(uint32_t v){value = v;}
+       ~RequestStatus(){}    
+      
+        uint32_t value;
+        struct 
+        {
+            uint32_t rqcp : 1; ///< Request completed mailbox
+            uint32_t txok : 1; ///< Transmission OK of mailbox
+            uint32_t alst : 1; ///< Arbitration lost for mailbox
+            uint32_t terr : 1; ///< Transmission error of mailbox
+            uint32_t tme  : 1; ///< Transmit mailbox empty
+            uint32_t      : 27;
+        } bit;
+    };
 
     /**
      * @brief Mailbox index.
@@ -74,6 +122,11 @@ private:
      * @brief CAN registers.
      */
     cpu::reg::Can* reg_;
+
+    /**
+     * @brief Transmit request status.
+     */    
+    RequestStatus requestStatus_;
 
 };
 
