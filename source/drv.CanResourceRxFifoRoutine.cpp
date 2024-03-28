@@ -1,16 +1,16 @@
 /**
- * @file      drv.CanResourceFifoRoutine.cpp
+ * @file      drv.CanResourceRxFifoRoutine.cpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#include "drv.CanResourceFifoRoutine.hpp"
+#include "drv.CanResourceRxFifoRoutine.hpp"
 
 namespace eoos
 {
 namespace drv
 {
 
-CanResourceFifoRoutine::CanResourceFifoRoutine(Index index)
+CanResourceRxFifoRoutine::CanResourceRxFifoRoutine(Index index)
     : lib::NonCopyable<lib::NoAllocator>()
     , api::Runnable()
     , index_( index ){
@@ -18,20 +18,20 @@ CanResourceFifoRoutine::CanResourceFifoRoutine(Index index)
     setConstructed( isConstructed );
 }    
 
-CanResourceFifoRoutine::~CanResourceFifoRoutine()
+CanResourceRxFifoRoutine::~CanResourceRxFifoRoutine()
 {
 }
 
-bool_t CanResourceFifoRoutine::isConstructed() const
+bool_t CanResourceRxFifoRoutine::isConstructed() const
 {
     return Parent::isConstructed();
 }
 
-void CanResourceFifoRoutine::start()
+void CanResourceRxFifoRoutine::start()
 {    
 }
 
-bool_t CanResourceFifoRoutine::construct()
+bool_t CanResourceRxFifoRoutine::construct()
 {
     bool_t res( false );
     do 

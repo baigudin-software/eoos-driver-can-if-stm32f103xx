@@ -9,16 +9,12 @@
 #include "api.Supervisor.hpp"
 #include "lib.NonCopyable.hpp"
 #include "drv.Can.hpp"
-#include "drv.CanResourceMailbox.hpp"
-#include "drv.CanResourceMailboxRoutine.hpp"
-#include "drv.CanResourceFifoRoutine.hpp"
+#include "drv.CanResourceTx.hpp"
+#include "drv.CanResourceRx.hpp"
 #include "cpu.Registers.hpp"
-#include "cpu.Interrupt.hpp"
 #include "sys.Mutex.hpp"
-#include "sys.Semaphore.hpp"
 #include "lib.Register.hpp"
 #include "lib.Guard.hpp"
-#include "lib.UniquePointer.hpp"
 
 namespace eoos
 {
@@ -48,7 +44,7 @@ public:
          * @brief Constructor.
          *
          * @param areg Target CPU register model.  
-         * @param asvc Supervisor call to the system.
+         * @param asvc ` call to the system.
          */
         Data(cpu::Registers& areg, api::Supervisor& asvc);
         
@@ -130,7 +126,7 @@ private:
     bool_t initialize();
 
     /**
-     * @brief Initializes the hardware.
+     * @brief Deinitializes the hardware.
      */
     void deinitialize();
 
@@ -160,24 +156,7 @@ private:
     bool_t setBitRate();
     
     /**
-     * @enum Exception
-     * @brief CAN Exception numbers.
-     */    
-    enum Exception
-    {
-        EXCEPTION_CAN1_TX  = cpu::Interrupt<A>::EXCEPTION_USB_HP_CAN1_TX,  ///< Transmit interrupt
-        EXCEPTION_CAN1_RX0 = cpu::Interrupt<A>::EXCEPTION_USB_LP_CAN1_RX0, ///< FIFO 0 interrupt
-        EXCEPTION_CAN1_RX1 = cpu::Interrupt<A>::EXCEPTION_CAN1_RX1,        ///< FIFO 1 interrupt
-        EXCEPTION_CAN1_SCE = cpu::Interrupt<A>::EXCEPTION_CAN1_SCE         ///< Status change error interrupt
-    };
-    
-    /**
-     * @brief Number of TX mailboxs.
-     */    
-    static const int32_t NUMBER_OF_TX_MAILBOXS = CanResourceMailbox::NUMBER_OF_TX_MAILBOXS;
-
-    /**
-     * @brief Number of TX mailboxs.
+     * @brief Number of RX FIFOs.
      */    
     static const int32_t NUMBER_OF_RX_FIFOS = 2;
     
@@ -195,46 +174,17 @@ private:
      * @brief CAN registers.
      */
     cpu::reg::Can* reg_;
-    
+        
     /**
-     * @brief This resource mutex.
-     */
-    sys::Mutex mutex_;
-
-    /**
-     * @brief TX mailboxs.
-     */    
-    CanResourceMailbox  mailbox0_;
-    CanResourceMailbox  mailbox1_;
-    CanResourceMailbox  mailbox2_;
-    CanResourceMailbox* mailbox_[NUMBER_OF_TX_MAILBOXS];
-
-    /**
-     * @brief TX complite semaphore.
-     */    
-    sys::Semaphore mailboxSem_;    
-
-    /**
-     * @brief Target CPU interrupt resource.
-     */
-    lib::UniquePointer<api::CpuInterrupt> mailboxInt_;
-    
-    /**
-     * @brief Target CPU interrupt routine.
+     * @brief TX resource.
      */        
-    CanResourceMailboxRoutine mailboxIsr_;
+    CanResourceTx tx_;
 
     /**
-     * @brief Target CPU interrupt resource.
-     */
-    lib::UniquePointer<api::CpuInterrupt> fifoInt_[NUMBER_OF_RX_FIFOS];
-
-    /**
-     * @brief Target CPU interrupt routine.
+     * @brief RX resource.
      */        
-    CanResourceFifoRoutine  fifoIsr0_;
-    CanResourceFifoRoutine  fifoIsr1_;
-    CanResourceFifoRoutine* fifoIsr_[NUMBER_OF_RX_FIFOS];
+    CanResourceRx rx_;
+
 };
 
 template <class A>
@@ -244,15 +194,8 @@ CanResource<A>::CanResource(Data& data, Config const& config)
     , data_( data )
     , config_( config )
     , reg_(  data_.reg.can[config_.number]  )    
-    , mutex_()
-    , mailbox0_( 0, reg_ )
-    , mailbox1_( 1, reg_ )
-    , mailbox2_( 2, reg_ )
-    , mailboxSem_( NUMBER_OF_TX_MAILBOXS, NUMBER_OF_TX_MAILBOXS )    
-    , mailboxInt_( NULLPTR )
-    , mailboxIsr_( mailbox_, mailboxSem_ )
-    , fifoIsr0_( CanResourceFifoRoutine::INDEX_FIFO0 )
-    , fifoIsr1_( CanResourceFifoRoutine::INDEX_FIFO1 ) {
+    , tx_( reg_, data_.svc )
+    , rx_( reg_, data_.svc ) {
     bool_t const isConstructed( construct() );
     setConstructed( isConstructed );
 }    
@@ -272,44 +215,24 @@ bool_t CanResource<A>::isConstructed() const
 template <class A>
 bool_t CanResource<A>::transmit(TxMessage const& message)
 {
-    bool_t res( false );
-    if( isConstructed() && mailboxSem_.acquire() )
-    {
-        lib::Guard<A> const guard(mutex_);
-        for(int32_t i(0); i<NUMBER_OF_TX_MAILBOXS; i++)
-        {
-            if( mailbox_[i]->isEmpty() )
-            {
-                res = mailbox_[i]->transmit(message);
-                break;
-            }
-        }
-    }
-    return res;
+    return tx_.transmit(message);
 }
 
 template <class A>
 bool_t CanResource<A>::receive(RxMessage* message)
 {
-	return false;
+    return rx_.receive(message);
 }
 
 template <class A>
 bool_t CanResource<A>::setReceiveFilter(RxFilter const& filter)
 {
-    return false;
+    return rx_.setReceiveFilter(filter);
 }
 
 template <class A>
 bool_t CanResource<A>::construct()
 {
-    mailbox_[0] = &mailbox0_;
-    mailbox_[1] = &mailbox1_;
-    mailbox_[2] = &mailbox2_;
-
-    fifoIsr_[0] = &fifoIsr0_;
-    fifoIsr_[1] = &fifoIsr1_;
-
     bool_t res( false );
     do 
     {
@@ -321,38 +244,14 @@ bool_t CanResource<A>::construct()
         {
             break;
         }
-        if( !mutex_.isConstructed() )
+        if( !tx_.isConstructed() )
         {
             break;
         }
-        if( !mailbox0_.isConstructed() )
+        if( !rx_.isConstructed() )
         {
             break;
         }
-        if( !mailbox1_.isConstructed() )
-        {
-            break;
-        }
-        if( !mailbox2_.isConstructed() )
-        {
-            break;
-        }
-        if( !mailboxSem_.isConstructed() )
-        {
-            break;            
-        }
-        if( !mailboxIsr_.isConstructed() )
-        {
-            break;
-        }
-        if( !fifoIsr0_.isConstructed() )
-        {
-            break;
-        }
-        if( !fifoIsr1_.isConstructed() )
-        {
-            break;
-        }                
         if( !initialize() )
         {
             break;
@@ -458,64 +357,6 @@ bool_t CanResource<A>::initialize()
         {
             break;
         }
-        // Get interrupt controller
-        api::CpuInterruptController& ic( data_.svc.getProcessor().getInterruptController() );
-        // Set ISR for Transmit mailbox empty interrupt enable generated 
-        // when RQCPx (Request completed mailbox) bit is set.
-        mailboxInt_.reset( ic.createResource(mailboxIsr_, EXCEPTION_CAN1_TX) );
-        if( mailboxInt_.isNull() )
-        {
-            break;
-        }
-        if( !mailboxInt_->isConstructed()  )
-        { 
-            break;
-        }
-        mailboxInt_->enable();
-        // Set ISR for Receive FIFOs
-        bool_t isFifoIntCreated( true );
-        for(int32_t i(0); i<NUMBER_OF_RX_FIFOS; i++)
-        {
-            int32_t source( -1 );
-            switch(i)
-            {
-                case 0:
-                {
-                    source = EXCEPTION_CAN1_RX0;
-                    break;
-                }
-                case 1:
-                {
-                    source = EXCEPTION_CAN1_RX1;
-                    break;
-                }
-                default:
-                {
-                    isFifoIntCreated = false;
-                    break;
-                }
-            }
-            if( !isFifoIntCreated )
-            {
-                break;
-            }
-            fifoInt_[i].reset( ic.createResource(*fifoIsr_[i], source) );
-            if( fifoInt_[i].isNull() )
-            {
-                isFifoIntCreated = false;
-                break;
-            }
-            if( !fifoIsr_[i]->isConstructed() )
-            {
-                isFifoIntCreated = false;
-                break;
-            }
-            fifoInt_[i]->enable();
-        }
-        if( !isFifoIntCreated )
-        {
-            break;
-        }
         // Enable interrupts
         ier.fetch();
         ier.bit().tmeie  = 1;
@@ -547,13 +388,6 @@ void CanResource<A>::deinitialize()
     ier.bit().ffie1  = 0;
     ier.bit().fovie1 = 0;
     ier.commit();
-    // Unset ISR for Transmit mailbox empty interrupt enable generated 
-    mailboxInt_->disable();
-    // Unset ISR for Receive FIFOs
-    for(int32_t i(0); i<NUMBER_OF_RX_FIFOS; i++)
-    {
-        fifoInt_[i]->disable();
-    }    
     // Disable clock peripheral.        
     static_cast<void>(enableClock(false));
 }

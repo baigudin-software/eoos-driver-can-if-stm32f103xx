@@ -1,9 +1,9 @@
 /**
- * @file      drv.CanResourceMailbox.cpp
+ * @file      drv.CanResourceTxMailbox.cpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#include "drv.CanResourceMailbox.hpp"
+#include "drv.CanResourceTxMailbox.hpp"
 #include "lib.Register.hpp"
 
 namespace eoos
@@ -11,23 +11,23 @@ namespace eoos
 namespace drv
 {
 
-CanResourceMailbox::CanResourceMailbox(int32_t index, cpu::reg::Can* reg)
+CanResourceTxMailbox::CanResourceTxMailbox(int32_t index, cpu::reg::Can* reg)
     : lib::NonCopyable<lib::NoAllocator>()
     , index_( index )
     , reg_( reg )
     , requestStatus_( 0 ) {  
 }    
 
-CanResourceMailbox::~CanResourceMailbox()
+CanResourceTxMailbox::~CanResourceTxMailbox()
 {
 }
 
-bool_t CanResourceMailbox::isConstructed() const
+bool_t CanResourceTxMailbox::isConstructed() const
 {
     return Parent::isConstructed();
 }
 
-bool_t CanResourceMailbox::transmit(Can::TxMessage const& message)
+bool_t CanResourceTxMailbox::transmit(Can::TxMessage const& message)
 {
     bool_t res( false );
     if( isConstructed() && isEmpty() )
@@ -66,7 +66,7 @@ bool_t CanResourceMailbox::transmit(Can::TxMessage const& message)
     return res;
 }
 
-bool_t CanResourceMailbox::isEmpty()
+bool_t CanResourceTxMailbox::isEmpty()
 {
     bool_t res( false );
     if( isConstructed() )
@@ -98,7 +98,7 @@ bool_t CanResourceMailbox::isEmpty()
     return res;
 }
 
-bool_t CanResourceMailbox::routine()
+bool_t CanResourceTxMailbox::routine()
 {
     bool_t res( false );
     if( isConstructed() )
@@ -115,7 +115,7 @@ bool_t CanResourceMailbox::routine()
     return res;
 }
 
-bool_t CanResourceMailbox::fixRequestStatus()
+bool_t CanResourceTxMailbox::fixRequestStatus()
 {
     bool_t res( true );
     lib::Register<cpu::reg::Can::Tsr> const tsr( reg_->tsr );
@@ -156,12 +156,12 @@ bool_t CanResourceMailbox::fixRequestStatus()
     return res;
 }
 
-bool_t CanResourceMailbox::isFixedRequestCompleted()
+bool_t CanResourceTxMailbox::isFixedRequestCompleted()
 {
     return requestStatus_.bit.rqcp == 1;
 }
 
-void CanResourceMailbox::clearRequestStatus()
+void CanResourceTxMailbox::clearRequestStatus()
 {
     lib::Register<cpu::reg::Can::Tsr> tsr( reg_->tsr );
     switch(index_)

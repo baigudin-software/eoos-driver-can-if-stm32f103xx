@@ -1,9 +1,9 @@
 /**
- * @file      drv.CanResourceMailboxRoutine.cpp
+ * @file      drv.CanResourceTxMailboxRoutine.cpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#include "drv.CanResourceMailboxRoutine.hpp"
+#include "drv.CanResourceTxMailboxRoutine.hpp"
 #include "sys.Thread.hpp"
 
 namespace eoos
@@ -11,7 +11,7 @@ namespace eoos
 namespace drv
 {
 
-CanResourceMailboxRoutine::CanResourceMailboxRoutine(CanResourceMailbox** mailbox, sys::Semaphore& mailboxSem)
+CanResourceTxMailboxRoutine::CanResourceTxMailboxRoutine(CanResourceTxMailbox** mailbox, sys::Semaphore& mailboxSem)
     : lib::NonCopyable<lib::NoAllocator>()
     , api::Runnable()
     , mailbox_( mailbox )
@@ -20,16 +20,16 @@ CanResourceMailboxRoutine::CanResourceMailboxRoutine(CanResourceMailbox** mailbo
     setConstructed( isConstructed );
 }    
 
-CanResourceMailboxRoutine::~CanResourceMailboxRoutine()
+CanResourceTxMailboxRoutine::~CanResourceTxMailboxRoutine()
 {
 }
 
-bool_t CanResourceMailboxRoutine::isConstructed() const
+bool_t CanResourceTxMailboxRoutine::isConstructed() const
 {
     return Parent::isConstructed();
 }
 
-void CanResourceMailboxRoutine::start()
+void CanResourceTxMailboxRoutine::start()
 {    
     bool_t hasToSwitchContex( false );
     for(int32_t i(0); i<NUMBER_OF_TX_MAILBOXS; i++)
@@ -48,7 +48,7 @@ void CanResourceMailboxRoutine::start()
     }
 }
 
-bool_t CanResourceMailboxRoutine::construct()
+bool_t CanResourceTxMailboxRoutine::construct()
 {
     bool_t res( false );
     do 

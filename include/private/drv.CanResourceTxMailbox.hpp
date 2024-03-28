@@ -1,10 +1,10 @@
 /**
- * @file      drv.CanResourceMailbox.hpp
+ * @file      drv.CanResourceTxMailbox.hpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#ifndef DRV_CANRESOURCEMAILBOX_HPP_
-#define DRV_CANRESOURCEMAILBOX_HPP_
+#ifndef DRV_CANRESOURCETXMAILBOX_HPP_
+#define DRV_CANRESOURCETXMAILBOX_HPP_
 
 #include "lib.NonCopyable.hpp"
 #include "lib.NoAllocator.hpp"
@@ -17,10 +17,10 @@ namespace drv
 {
 
 /**
- * @class CanResourceMailbox
+ * @class CanResourceTxMailbox
  * @brief TX Mailbox handler.
  */
-class CanResourceMailbox : public lib::NonCopyable<lib::NoAllocator>
+class CanResourceTxMailbox : public lib::NonCopyable<lib::NoAllocator>
 {
     typedef lib::NonCopyable<lib::NoAllocator> Parent;
 
@@ -37,12 +37,12 @@ public:
      * @param index Mailbox index.
      * @param reg CAN controller register map.     
      */
-    CanResourceMailbox(int32_t index, cpu::reg::Can* reg);
+    CanResourceTxMailbox(int32_t index, cpu::reg::Can* reg);
     
     /** 
      * @brief Destructor.
      */
-    virtual ~CanResourceMailbox();
+    virtual ~CanResourceTxMailbox();
     
     /**
      * @copydoc eoos::api::Object::isConstructed()
@@ -132,4 +132,4 @@ private:
 
 } // namespace drv
 } // namespace eoos
-#endif // DRV_CANRESOURCEMAILBOX_HPP_
+#endif // DRV_CANRESOURCETXMAILBOX_HPP_

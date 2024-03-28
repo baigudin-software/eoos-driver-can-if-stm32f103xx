@@ -1,14 +1,13 @@
 /**
- * @file      drv.CanResourceFifoRoutine.hpp
+ * @file      drv.CanResourceRxFifoRoutine.hpp
  * @author    Sergey Baigudin, sergey@baigudin.software
  * @copyright 2024, Sergey Baigudin, Baigudin Software
  */
-#ifndef DRV_CANRESOURCEFIFOROUTINE_HPP_
-#define DRV_CANRESOURCEFIFOROUTINE_HPP_
+#ifndef DRV_CANRESOURCERXFIFOROUTINE_HPP_
+#define DRV_CANRESOURCERXFIFOROUTINE_HPP_
 
 #include "lib.NonCopyable.hpp"
 #include "lib.NoAllocator.hpp"
-#include "drv.CanResourceMailbox.hpp"
 #include "sys.Semaphore.hpp"
 
 namespace eoos
@@ -17,10 +16,10 @@ namespace drv
 {
 
 /**
- * @class CanResourceFifoRoutine
+ * @class CanResourceRxFifoRoutine
  * @brief CAN device interrupt RX resource.
  */
-class CanResourceFifoRoutine : public lib::NonCopyable<lib::NoAllocator>, public api::Runnable
+class CanResourceRxFifoRoutine : public lib::NonCopyable<lib::NoAllocator>, public api::Runnable
 {
     typedef lib::NonCopyable<lib::NoAllocator> Parent;
 
@@ -41,12 +40,12 @@ public:
      *
      * @param FIFO RX index.
      */
-    CanResourceFifoRoutine(Index index);
+    CanResourceRxFifoRoutine(Index index);
     
     /** 
      * @brief Destructor.
      */
-    virtual ~CanResourceFifoRoutine();
+    virtual ~CanResourceRxFifoRoutine();
     
     /**
      * @copydoc eoos::api::Object::isConstructed()
@@ -80,4 +79,4 @@ private:
 
 } // namespace drv
 } // namespace eoos
-#endif // DRV_CANRESOURCEFIFOROUTINE_HPP_
+#endif // DRV_CANRESOURCERXFIFOROUTINE_HPP_
