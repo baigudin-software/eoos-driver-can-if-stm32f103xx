@@ -108,36 +108,38 @@ public:
         SamplePoint samplePoint;
         Reg         reg;
     };
-
+    
     /**
-     * @struct TxMessage
-     * @brief CAN TX message structure definition.
+     * @union Id
+     * @brief CAN ID structure.
      */
-    struct TxMessage
+    struct Id
     {
-        uint32_t    id;         ///< An identifier of 11 bits or 29 bits
-        bool_t      ide;        ///< Identifier extension bit that is false for base frame and true for extended frame
-        bool_t      rtr;        ///< Remote transmission request that is true for remote request frames
-        uint32_t    dlc;        ///< Data length code that is number of bytes of data (0–8 bytes)
-        union
-        {
-            uint64_t v64[1];
-            uint32_t v32[2];
-            uint16_t v16[4];
-            uint8_t  v8[8];
-        } data;                 ///< Data to be transmitted
+        uint32_t      : 1;
+        uint32_t      : 1;
+        uint32_t      : 1;
+        uint32_t exid : 18;
+        uint32_t stid : 11;
+        
+        /**
+         * @brief Comparison operator to equal.
+         *
+         * @param obj Reference to object.
+         * @return True if objects are equal.
+         */        
+        bool_t operator==(Id const& obj) const;        
     };
     
     /**
-     * @struct RxMessage
+     * @struct Message
      * @brief CAN RX message structure definition.
      */
-    struct RxMessage
+    struct Message
     {
-        uint32_t    id;         ///< An identifier of 11 bits or 29 bits
-        bool_t      ide;        ///< Identifier extension bit that is false for base frame and true for extended frame
-        bool_t      rtr;        ///< Remote transmission request that is true for remote request frames
-        uint32_t    dlc;        ///< Data length code that is number of bytes of data (0–8 bytes)
+        Id           id;        ///< An identifier of 11 bits or 29 bits
+        bool_t       rtr;       ///< Remote transmission request that is true for remote request frames        
+        bool_t       ide;       ///< Identifier extension bit that is false for base frame and true for extended frame
+        uint32_t     dlc;       ///< Data length code that is number of bytes of data (0–8 bytes)
         union
         {
             uint64_t v64[1];
@@ -145,7 +147,26 @@ public:
             uint16_t v16[4];
             uint8_t  v8[8];
         } data;                 ///< Data to be transmitted
+
+        /**
+         * @brief Comparison operator to equal.
+         *
+         * @param obj Reference to object.
+         * @return True if objects are equal.
+         */        
+        bool_t operator==(Message const& obj) const;
+
     };
+    
+    /**
+     * @enum RxFifo
+     * @brief Specifies the FIFO (0 or 1) from which receiving message will be.
+     */
+    enum RxFifo
+    {
+        RXFIFO_0 = 0,
+        RXFIFO_1 = 1
+    };    
     
     /**
      * @struct RxFilter
@@ -159,8 +180,8 @@ public:
          */
         enum Fifo
         {
-            FIFO_0 = 0,            
-            FIFO_1 = 1
+            FIFO_0 = RXFIFO_0,
+            FIFO_1 = RXFIFO_1
         };
         
         /**
@@ -179,8 +200,8 @@ public:
          */
         enum Scale
         {
-            Scale_16BIT = 0, ///< Two 16-bit filters
-            Scale_32BIT = 1  ///< One 32-bit filter
+            SCALE_16BIT = 0, ///< Two 16-bit filters
+            SCALE_32BIT = 1  ///< One 32-bit filter
         };
         
         /**
@@ -188,20 +209,15 @@ public:
          * @brief 32-Bit Filter mapping.
          */
         union Filter32
-        {
-            typedef uint32_t Value;
-            Filter32(){}
-            Filter32(Value v){value = v;}
-           ~Filter32(){}    
-          
-            Value value;
+        {          
+            uint32_t value;
             struct Bit
             {
-                Value      : 1;
-                Value rtr  : 1;
-                Value ide  : 1;
-                Value exid : 18;
-                Value stid : 11;
+                uint32_t      : 1;
+                uint32_t rtr  : 1;
+                uint32_t ide  : 1;
+                uint32_t exid : 18;
+                uint32_t stid : 11;
             } bit;
         };
 
@@ -239,21 +255,16 @@ public:
          * @brief 16-Bit Filter mapping.
          */
         union Filter16
-        {
-            typedef uint16_t Value;
-            Filter16(){}
-            Filter16(Value v){value = v;}
-           ~Filter16(){}    
-          
-            Value value;
+        {          
+            uint16_t value;
             struct Bit
             {
-                Value exid1715 : 3;
-                Value rtr      : 1;
-                Value ide      : 1;
-                Value stid     : 11;
+                uint16_t exid1715 : 3;
+                uint16_t rtr      : 1;
+                uint16_t ide      : 1;
+                uint16_t stid     : 11;
             } bit;
-        };        
+        };
 
         /**
          * @struct FilterIdMask16
@@ -298,11 +309,11 @@ public:
 
         static const uint32_t NUMBER_OF_FILTER_GROUPS = 14; ///< Number of groups of filters.
         
-        Filters     filters; ///< Specifies the filters of all groups depending on Mode and Scale.
         Fifo        fifo;    ///< Specifies the FIFO (0 or 1) which will be assigned to the filter.
         uint32_t    index;   ///< Specifies the filter index in ranges from 0 to 13.
         Mode        mode;    ///< Specifies the filter mode.
         Scale       scale;   ///< Specifies the filter scale.
+        Filters     filters; ///< Specifies the filters of all groups depending on Mode and Scale.        
     };
 
     /** 
@@ -321,7 +332,14 @@ public:
      * @param message A message to tramsmit.
      * @return True if a transmition is initialied.
      */
-    virtual bool_t transmit(TxMessage const& message) = 0;
+    virtual bool_t transmit(Message const& message) = 0;
+
+    /**
+     * @brief Returns error count of transmission.
+     *
+     * @return Transmit error counter, or -1 if no counter supported.
+     */    
+    virtual int32_t getTransmitErrorCounter() const = 0;
 
     /**
      * @brief Receives a message.
@@ -331,9 +349,10 @@ public:
      * a message comes. 
      *
      * @param message A message structure to receive to it.
+     * @param fifo    RX FIFO to receive message.
      * @return True if a message is received successfully.
      */
-    virtual bool_t receive(RxMessage* message) = 0;
+    virtual bool_t receive(Message* message, RxFifo fifo) = 0;
 
     /**
      * @brief Sets filter for receiving messages.
@@ -352,6 +371,21 @@ public:
     static Can* create(Config const& config);
 
 };
+
+inline bool_t Can::Id::operator==(Can::Id const& obj) const
+{
+    return( exid == obj.exid
+         && stid == obj.stid ) ? true : false;
+}
+
+inline bool_t Can::Message::operator==(Can::Message const& obj) const
+{
+    return( id == obj.id
+         && rtr == obj.rtr
+         && ide == obj.ide
+         && dlc == obj.dlc
+         && data.v64[0] == obj.data.v64[0] ) ? true : false;
+}
 
 } // namespace drv
 } // namespace eoos

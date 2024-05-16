@@ -53,8 +53,15 @@ public:
     /**
      * @copydoc eoos::drv::Can::transmit()
      */
-    bool_t transmit(Can::TxMessage const& message);
-	        
+    bool_t transmit(Can::Message const& message);
+
+    /**
+     * @brief Returns TX error counter.
+     *
+     * @return Transmit error counter, or -1 if no counter supported.
+     */    
+    int32_t getErrorCounter() const;
+
 protected:
 
     using Parent::setConstructed;
@@ -62,7 +69,7 @@ protected:
 private:
 
     /**
-     * Constructs this object.
+     * @brief Constructs this object.
      *
      * @return true if object has been constructed successfully.
      */
@@ -120,7 +127,7 @@ private:
     /**
      * @brief TX complite semaphore.
      */    
-    sys::Semaphore mailboxSem_;    
+    sys::Semaphore mailboxSem_;
 
     /**
      * @brief Target CPU interrupt resource.

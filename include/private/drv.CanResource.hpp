@@ -60,6 +60,8 @@ public:
 
         /**
          * @brief All the resource guard.
+         *
+         * @todo Clarify whether the mutex is needed at all here and in other such drivers.
          */        
         sys::Mutex mutex;
 
@@ -86,12 +88,17 @@ public:
     /**
      * @copydoc eoos::drv::Can::transmit()
      */
-    virtual bool_t transmit(TxMessage const& message);
+    virtual bool_t transmit(Message const& message);
+    
+    /**
+     * @copydoc eoos::drv::Can::getTransmitErrorCounter()
+     */    
+    virtual int32_t getTransmitErrorCounter() const;   
 	
     /**
      * @copydoc eoos::drv::Can::receive()
      */
-    virtual bool_t receive(RxMessage* message);
+    virtual bool_t receive(Message* message, RxFifo fifo);
     
     /**
      * @copydoc eoos::drv::Can::setReceiveFilter()
@@ -105,7 +112,7 @@ protected:
 private:
 
     /**
-     * Constructs this object.
+     * @brief Constructs this object.
      *
      * @return true if object has been constructed successfully.
      */
@@ -193,9 +200,9 @@ CanResource<A>::CanResource(Data& data, Config const& config)
     , Can()
     , data_( data )
     , config_( config )
-    , reg_(  data_.reg.can[config_.number]  )    
+    , reg_( data_.reg.can[config_.number]  )    
     , tx_( reg_, data_.svc )
-    , rx_( reg_, data_.svc ) {
+    , rx_( config_, reg_, data_.svc ) {
     bool_t const isConstructed( construct() );
     setConstructed( isConstructed );
 }    
@@ -213,15 +220,21 @@ bool_t CanResource<A>::isConstructed() const
 }
 
 template <class A>
-bool_t CanResource<A>::transmit(TxMessage const& message)
+bool_t CanResource<A>::transmit(Message const& message)
 {
     return tx_.transmit(message);
 }
 
 template <class A>
-bool_t CanResource<A>::receive(RxMessage* message)
+int32_t CanResource<A>::getTransmitErrorCounter() const
 {
-    return rx_.receive(message);
+    return tx_.getErrorCounter();
+}
+
+template <class A>
+bool_t CanResource<A>::receive(Message* message, RxFifo fifo)
+{
+    return rx_.receive(message, fifo);
 }
 
 template <class A>

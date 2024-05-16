@@ -55,7 +55,14 @@ public:
      * @param message A message to tramsmit.
      * @return True if a transmition is initialied.     
      */
-    bool_t transmit(Can::TxMessage const& message);
+    bool_t transmit(Can::Message const& message);
+    
+    /**
+     * @brief Returns TX error counter.
+     *
+     * @return Transmit error counter, or -1 if no counter supported.
+     */    
+    int32_t getErrorCounter() const;
 
     /**
      * @brief Tests if the mailbox is ready to transmit.
@@ -127,6 +134,11 @@ private:
      * @brief Transmit request status.
      */    
     RequestStatus requestStatus_;
+    
+    /**
+     * @brief Error counter.
+     */
+    uint32_t errorCounter_;
 
 };
 

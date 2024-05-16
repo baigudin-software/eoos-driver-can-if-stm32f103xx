@@ -35,7 +35,7 @@ bool_t CanResourceTx::isConstructed() const
     return Parent::isConstructed();
 }
 
-bool_t CanResourceTx::transmit(Can::TxMessage const& message)
+bool_t CanResourceTx::transmit(Can::Message const& message)
 {
     bool_t res( false );
     if( isConstructed() && mailboxSem_.acquire() )
@@ -51,6 +51,16 @@ bool_t CanResourceTx::transmit(Can::TxMessage const& message)
         }
     }
     return res;
+}
+
+int32_t CanResourceTx::getErrorCounter() const
+{
+    int32_t errorCounter( 0 );
+    for(int32_t i(0); i<NUMBER_OF_TX_MAILBOXS; i++)
+    {
+        errorCounter += mailbox_[i]->getErrorCounter();
+    }
+    return errorCounter;
 }
 
 bool_t CanResourceTx::construct()

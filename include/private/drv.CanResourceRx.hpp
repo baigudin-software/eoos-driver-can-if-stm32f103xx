@@ -8,12 +8,9 @@
 
 #include "lib.NonCopyable.hpp"
 #include "lib.NoAllocator.hpp"
-#include "api.Supervisor.hpp"
 #include "drv.Can.hpp"
-#include "drv.CanResourceRxFifoRoutine.hpp"
-#include "cpu.Interrupt.hpp"
+#include "drv.CanResourceRxFifo.hpp"
 #include "sys.Mutex.hpp"
-#include "lib.UniquePointer.hpp"
 
 namespace eoos
 {
@@ -33,10 +30,11 @@ public:
     /**
      * @brief Constructor.
      *
-     * @param reg CAN registers.
-     * @param svc Supervisor call to the system.
+     * @param config Configuration of the driver resource.          
+     * @param reg    CAN registers.
+     * @param svc    Supervisor call to the system.
      */
-    CanResourceRx(cpu::reg::Can* reg, api::Supervisor& svc);
+    CanResourceRx(Can::Config const& config, cpu::reg::Can* reg, api::Supervisor& svc);
     
     /** 
      * @brief Destructor.
@@ -51,7 +49,7 @@ public:
     /**
      * @copydoc eoos::drv::Can::receive()
      */
-    bool_t receive(Can::RxMessage* message);
+    bool_t receive(Can::Message* message, Can::RxFifo fifo);
     
     /**
      * @copydoc eoos::drv::Can::setReceiveFilter()
@@ -65,38 +63,11 @@ protected:
 private:
 
     /**
-     * Constructs this object.
+     * @brief Constructs this object.
      *
      * @return true if object has been constructed successfully.
      */
     bool_t construct();
-    
-    /**
-     * @brief Initializes the hardware.
-     *
-     * @return True if initialized.
-     */
-    bool_t initialize();
-
-    /**
-     * @brief Deinitializes the hardware.
-     */
-    void deinitialize();    
-        
-    /**
-     * @enum Exception
-     * @brief CAN Exception numbers.
-     */    
-    enum Exception
-    {
-        EXCEPTION_CAN1_RX0 = cpu::Interrupt<lib::NoAllocator>::EXCEPTION_USB_LP_CAN1_RX0, ///< FIFO 0 interrupt
-        EXCEPTION_CAN1_RX1 = cpu::Interrupt<lib::NoAllocator>::EXCEPTION_CAN1_RX1,        ///< FIFO 1 interrupt
-    };
-    
-    /**
-     * @brief Number of RX FIFOs.
-     */    
-    static const int32_t NUMBER_OF_RX_FIFOS = 2;
     
     /**
      * @brief CAN registers.
@@ -104,29 +75,18 @@ private:
     cpu::reg::Can* reg_;
 
     /**
-     * @brief Supervisor call to the system.
-     */        
-    api::Supervisor& svc_;
-
-    /**
      * @brief This resource mutex.
      */
     sys::Mutex mutex_;
 
     /**
-     * @brief Target CPU interrupt resource.
-     */
-    lib::UniquePointer<api::CpuInterrupt> fifoInt_[NUMBER_OF_RX_FIFOS];
-
-    /**
-     * @brief Target CPU interrupt routine.
+     * @brief RX FIFOs.
      */        
-    CanResourceRxFifoRoutine  fifoIsr0_;
-    CanResourceRxFifoRoutine  fifoIsr1_;
-    CanResourceRxFifoRoutine* fifoIsr_[NUMBER_OF_RX_FIFOS];
+    CanResourceRxFifo fifo0_;
+    CanResourceRxFifo fifo1_;
 
 };
 
 } // namespace drv
 } // namespace eoos
-#endif // DRV_CANRESOURCETX_HPP_
+#endif // DRV_CANRESOURCERX_HPP_

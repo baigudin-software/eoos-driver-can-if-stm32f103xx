@@ -15,7 +15,8 @@ CanResourceTxMailbox::CanResourceTxMailbox(int32_t index, cpu::reg::Can* reg)
     : lib::NonCopyable<lib::NoAllocator>()
     , index_( index )
     , reg_( reg )
-    , requestStatus_( 0 ) {  
+    , requestStatus_( 0 )
+    , errorCounter_( 0 ) {  
 }    
 
 CanResourceTxMailbox::~CanResourceTxMailbox()
@@ -27,7 +28,7 @@ bool_t CanResourceTxMailbox::isConstructed() const
     return Parent::isConstructed();
 }
 
-bool_t CanResourceTxMailbox::transmit(Can::TxMessage const& message)
+bool_t CanResourceTxMailbox::transmit(Can::Message const& message)
 {
     bool_t res( false );
     if( isConstructed() && isEmpty() )
@@ -44,13 +45,13 @@ bool_t CanResourceTxMailbox::transmit(Can::TxMessage const& message)
         {
             tixr.bit().ide = 0;
             tixr.bit().exid = 0;
-            tixr.bit().stid = message.id & 0x000007FF;
+            tixr.bit().stid = message.id.stid;
         }
         else
         {
             tixr.bit().ide = 1;
-            tixr.bit().exid = message.id & 0x0003FFFF;
-            tixr.bit().stid = (message.id >> 18) & 0x000007FF;
+            tixr.bit().exid = message.id.exid;
+            tixr.bit().stid = message.id.stid;
         }
         tixr.commit();
         tdtxr.bit().dlc = message.dlc;
@@ -64,6 +65,11 @@ bool_t CanResourceTxMailbox::transmit(Can::TxMessage const& message)
         res = true;
     }
     return res;
+}
+
+int32_t CanResourceTxMailbox::getErrorCounter() const
+{
+    return errorCounter_;
 }
 
 bool_t CanResourceTxMailbox::isEmpty()
@@ -158,34 +164,42 @@ bool_t CanResourceTxMailbox::fixRequestStatus()
 
 bool_t CanResourceTxMailbox::isFixedRequestCompleted()
 {
-    return requestStatus_.bit.rqcp == 1;
+    const int32_t ERROR_COUNTER_LIMIT( 0x20000000 );
+    bool_t const isTransmited( (requestStatus_.bit.rqcp == 1) && (requestStatus_.bit.tme == 1) );
+    if( isTransmited && requestStatus_.bit.txok == 0 )
+    {
+        if( errorCounter_ < ERROR_COUNTER_LIMIT )
+        {
+            errorCounter_++;
+        }
+    }    
+    return isTransmited;
 }
 
 void CanResourceTxMailbox::clearRequestStatus()
 {
-    lib::Register<cpu::reg::Can::Tsr> tsr( reg_->tsr );
     switch(index_)
     {
         case 0:
         {
-            tsr.bit().rqcp0 = 1;
+            reg_->tsr.value = cpu::reg::Can::Tsr::RQCP0_MASK;
             break;
         }
         case 1:
         {
-            tsr.bit().rqcp1 = 1;
+            reg_->tsr.value = cpu::reg::Can::Tsr::RQCP1_MASK;
             break;                
         }
         case 2:
         {
-            tsr.bit().rqcp2 = 1;
+            reg_->tsr.value = cpu::reg::Can::Tsr::RQCP2_MASK;
             break;
         }
         default:
         {
+            break;
         }
     }
-    tsr.commit();
 }
 
 } // namespace drv
