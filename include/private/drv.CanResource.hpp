@@ -44,7 +44,7 @@ public:
          * @brief Constructor.
          *
          * @param areg Target CPU register model.  
-         * @param asvc ` call to the system.
+         * @param asvc Supervisor call to the system.
          */
         Data(cpu::Registers& areg, api::Supervisor& asvc);
         
@@ -425,9 +425,22 @@ bool_t CanResource<A>::enableClock(bool_t enable)
     {
         case NUMBER_CAN1:
         {
+            // CAN1 clock enabled
             lib::Register<cpu::reg::Rcc::Apb1enr> apb1enr( data_.reg.rcc->apb1enr );
             apb1enr.fetch().bit().can1en = en;
             apb1enr.commit();
+            // IO port A clock enabled            
+            data_.reg.rcc->apb2enr.bit.iopaen = 1; 
+            // IO port A configuration
+            int32_t const index( cpu::Registers::INDEX_GPIOA );            
+            cpu::reg::Gpio::Crh crh( data_.reg.gpio[index]->crh.value );
+            // CAN1_RX port PA11
+            crh.bit.cnf11 = 2;       // Input with pull-up / pull-down as Floating input does not work
+            crh.bit.mode11 = 0;      // Input mode (state after reset)
+            // CAN1_TX port PA12
+            crh.bit.cnf12 = 2;      // Alternate function output Push-pull
+            crh.bit.mode12 = 3;     // Output mode, max speed 50 MHz.
+            data_.reg.gpio[index]->crh.value = crh.value;          
             break;
         }
         default:
@@ -442,17 +455,30 @@ bool_t CanResource<A>::enableClock(bool_t enable)
 template <class A>
 bool_t CanResource<A>::setBitRate()
 {
+    // bxCAN is APB1 peripheral on PCLK1 of 36 MHz for SYSCLK of 72 MHz.
+    //
+    // Calculation for 250 Kbit/s with  Tbit = 1/(250*1000) = 4 us 
+    // Fpclk = 36 MHz
+    // Tpclk = 27,7[7] ns
+    // Fq = 36 / 9 (Prescale BTR.BRP) = 4 MHz
+    // Tq = 27,7[7] * 9 (Prescale BTR.BRP) = 250 ns
+    // NominalBitTime = tq + tBS1 + tBS2 = 16 * 250 ns = 4 us
+    //
+    // More about calculation see here: http://www.bittiming.can-wiki.info/
     uint32_t const value[2][9] = {
-        {   // For CANopen
-            0x001e0001, // 1000 
-            0x001b0002, // 800  
-            0x001e0003, // 500  
-            0x001c0008, // 250  
-            0x001c0011, // 125  
-            0x001e0013, // 100  
-            0x001c002c, // 50   
-            0x001e0063, // 20   
-            0x001c00e0  // 10   
+        {               // CANopen Sample Point = 87.5% and SJW = 1
+                        // -----------------------------------------------------
+                        // | Bit Rate | Prescale | Time quanta | BS1   | BS2   |
+                        // -----------------------------------------------------
+            0x001e0001, // | 1000     |          |             |       |       |
+            0x001b0002, // | 800      |          |             |       |       |
+            0x001e0003, // | 500      |          |             |       |       |
+            0x001c0008, // | 250      | 9        | 16          | 13    | 2     |
+            0x001c0011, // | 125      |          |             |       |       |
+            0x001e0013, // | 100      |          |             |       |       |
+            0x001c002c, // | 50       |          |             |       |       |
+            0x001e0063, // | 20       |          |             |       |       |
+            0x001c00e0  // | 10       |          |             |       |       |
         }, 
         {   // For ARINC 825
             0x003c0001, // 1000 

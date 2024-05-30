@@ -115,11 +115,11 @@ public:
      */
     struct Id
     {
-        uint32_t      : 1;
-        uint32_t      : 1;
-        uint32_t      : 1;
         uint32_t exid : 18;
-        uint32_t stid : 11;
+        uint32_t stid : 11;        
+        uint32_t      : 1;
+        uint32_t      : 1;
+        uint32_t      : 1;
         
         /**
          * @brief Comparison operator to equal.
@@ -127,7 +127,8 @@ public:
          * @param obj Reference to object.
          * @return True if objects are equal.
          */        
-        bool_t operator==(Id const& obj) const;        
+        bool_t operator==(Id const& obj) const;
+
     };
     
     /**
@@ -155,6 +156,14 @@ public:
          * @return True if objects are equal.
          */        
         bool_t operator==(Message const& obj) const;
+        
+        /**
+         * @brief Comparison operator to inequality.
+         *
+         * @param obj Reference to object.
+         * @return True if objects are inequality.
+         */        
+        bool_t operator!=(Message const& obj) const;
 
     };
     
@@ -385,6 +394,11 @@ inline bool_t Can::Message::operator==(Can::Message const& obj) const
          && ide == obj.ide
          && dlc == obj.dlc
          && data.v64[0] == obj.data.v64[0] ) ? true : false;
+}
+
+inline bool_t Can::Message::operator!=(Can::Message const& obj) const
+{
+    return (*this == obj) ? false : true;
 }
 
 } // namespace drv

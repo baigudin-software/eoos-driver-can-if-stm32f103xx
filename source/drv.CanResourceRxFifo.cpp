@@ -54,7 +54,7 @@ bool_t CanResourceRxFifo::receive(Can::Message* message)
 
 void CanResourceRxFifo::start()
 {
-    lib::Register<cpu::reg::Can::RfXr>      rfxr ( reg_->rfxr[index_]     );    
+    lib::Register<cpu::reg::Can::RfXr> rfxr ( reg_->rfxr[index_]     );    
     if( rfxr.bit().fmpx > 0 )
     {
         lib::Register<cpu::reg::Can::Rx::RiXr>  rixr ( reg_->rx[index_].rixr  );
