@@ -70,14 +70,10 @@ public:
         struct Mcr
         {
             uint32_t       : 2;
-            uint32_t txfp  : 1;     ///< Transmit FIFO priority 							(reset value is 0)
-            uint32_t rflm  : 1;     ///< Receive FIFO locked mode 							(reset value is 0)
-            uint32_t nart  : 1;     ///< No automatic retransmission 						(reset value is 0)
-            uint32_t awum  : 1;     ///< Automatic wake-up mode 							(reset value is 0)
-            uint32_t abom  : 1;     ///< Automatic bus-off management 						(reset value is 0)
-            uint32_t ttcm  : 1;     ///< Time triggered communication mode 					(reset value is 0)
-            uint32_t       : 8;
-            uint32_t dbf   : 1;     ///< CAN reception and transmission frozen during debug	(reset value is 1)
+            uint32_t txfp  : 1;     ///< Transmit FIFO priority             (reset value is 0)
+            uint32_t rflm  : 1;     ///< Receive FIFO locked mode           (reset value is 0)
+            uint32_t       : 12;
+            uint32_t dbf   : 1;     ///< CAN RX and TX frozen during debug  (reset value is 1)
             uint32_t       : 15;
 
         };
@@ -89,8 +85,8 @@ public:
         struct Btr
         {
             uint32_t      : 30;
-            uint32_t lbkm : 1;      ///< Loop back mode for debug 							(reset value is 0)
-            uint32_t silm : 1;      ///< Silent mode for debug 								(reset value is 0)
+            uint32_t lbkm : 1;      ///< Loop back mode for debug                             (reset value is 0)
+            uint32_t silm : 1;      ///< Silent mode for debug                                  (reset value is 0)
         };
         
         Mcr mcr;

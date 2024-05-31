@@ -11,6 +11,7 @@
 #include "drv.Can.hpp"
 #include "drv.CanResourceTx.hpp"
 #include "drv.CanResourceRx.hpp"
+#include "drv.CanResourceStatus.hpp"
 #include "cpu.Registers.hpp"
 #include "sys.Mutex.hpp"
 #include "lib.Register.hpp"
@@ -191,6 +192,11 @@ private:
      * @brief RX resource.
      */        
     CanResourceRx rx_;
+    
+    /**
+     * @brief Status change errror resource.
+     */    
+    CanResourceStatus sce_;
 
 };
 
@@ -200,9 +206,10 @@ CanResource<A>::CanResource(Data& data, Config const& config)
     , Can()
     , data_( data )
     , config_( config )
-    , reg_( data_.reg.can[config_.number]  )    
+    , reg_( data_.reg.can[config_.number]  )  
     , tx_( reg_, data_.svc )
-    , rx_( config_, reg_, data_.svc ) {
+    , rx_( config_, reg_, data_.svc )
+    , sce_( reg_, data_.svc ) {
     bool_t const isConstructed( construct() );
     setConstructed( isConstructed );
 }    
@@ -325,13 +332,13 @@ bool_t CanResource<A>::initialize()
         }
         // Set master control register        
         mcr.fetch();
-        mcr.bit().dbf  = config_.reg.mcr.dbf;
-        mcr.bit().ttcm = config_.reg.mcr.ttcm;
-        mcr.bit().abom = config_.reg.mcr.abom;
-        mcr.bit().awum = config_.reg.mcr.awum;
-        mcr.bit().nart = config_.reg.mcr.nart;
-        mcr.bit().rflm = config_.reg.mcr.rflm;
-        mcr.bit().txfp = config_.reg.mcr.txfp;
+        mcr.bit().txfp = config_.reg.mcr.txfp; ///< Transmit FIFO priority            (reset value is 0)
+        mcr.bit().rflm = config_.reg.mcr.rflm; ///< Receive FIFO locked mode          (reset value is 0)
+        mcr.bit().nart = 0;                    ///< No automatic retransmission       (reset value is 0)
+        mcr.bit().awum = 0;                    ///< Automatic wake-up mode            (reset value is 0)
+        mcr.bit().abom = 0;                    ///< Automatic bus-off management      (reset value is 0)
+        mcr.bit().ttcm = 0;                    ///< Time triggered communication mode (reset value is 0)
+        mcr.bit().dbf  = config_.reg.mcr.dbf;  ///< CAN RX and TX frozen during debug (reset value is 1)
         mcr.commit();
         // Set debug mode
         if( config_.reg.mcr.dbf == 1 )
@@ -372,13 +379,24 @@ bool_t CanResource<A>::initialize()
         }
         // Enable interrupts
         ier.fetch();
+        // Transmit interrupt
         ier.bit().tmeie  = 1;
+        // FIFO 0 interrupt
         ier.bit().fmpie0 = 1;
         ier.bit().ffie0  = 1;
         ier.bit().fovie0 = 1;
+        // FIFO 1 interrupt        
         ier.bit().fmpie1 = 1;
         ier.bit().ffie1  = 1;
         ier.bit().fovie1 = 1;
+        // Error and status change interrupt
+        ier.bit().ewgie  = 1;
+        ier.bit().epvie  = 1;
+        ier.bit().bofie  = 1;
+        ier.bit().lecie  = 1;
+        ier.bit().errie  = 1;
+        ier.bit().wkuie  = 1;
+        ier.bit().slkie  = 1;
         ier.commit();
         // Complite successfully
         res = true;
@@ -393,13 +411,24 @@ void CanResource<A>::deinitialize()
     lib::Register<cpu::reg::Can::Ier> ier( reg_->ier );
     // Disable interrupts
     ier.fetch();
+    // Transmit interrupt
     ier.bit().tmeie  = 0;
+    // FIFO 0 interrupt
     ier.bit().fmpie0 = 0;
     ier.bit().ffie0  = 0;
     ier.bit().fovie0 = 0;
+    // FIFO 1 interrupt        
     ier.bit().fmpie1 = 0;
     ier.bit().ffie1  = 0;
     ier.bit().fovie1 = 0;
+    // Error and status change interrupt
+    ier.bit().ewgie  = 0;
+    ier.bit().epvie  = 0;
+    ier.bit().bofie  = 0;
+    ier.bit().lecie  = 0;
+    ier.bit().errie  = 0;
+    ier.bit().wkuie  = 0;
+    ier.bit().slkie  = 0;
     ier.commit();
     // Disable clock peripheral.        
     static_cast<void>(enableClock(false));
